@@ -2,11 +2,36 @@ import functools
 
 from environs import Env
 from redis import Redis
-from telegram.ext import CommandHandler, Filters, MessageHandler, Updater
+from telegram.ext import (CallbackQueryHandler, CommandHandler, Filters,
+                          MessageHandler, Updater)
+from telegram import InlineKeyboardButton, InlineKeyboardMarkup
 
 
 def start(update, context):
-    update.message.reply_text(text='Hello!')
+    keyboard = [
+        [
+            InlineKeyboardButton("Option 1", callback_data='1'),
+            InlineKeyboardButton("Option 2", callback_data='2'),
+        ],
+        [InlineKeyboardButton("Option 3", callback_data='3')],
+    ]
+    reply_markup = InlineKeyboardMarkup(keyboard)
+    update.message.reply_text('Please choose:', reply_markup=reply_markup)
+
+    return 'OPTION'
+
+
+def button(update, context):
+    """Parses the CallbackQuery and updates the message text."""
+    query = update.callback_query
+
+    # CallbackQueries need to be answered,
+    # even if no notification to the user is needed
+    # Some clients may have trouble otherwise.
+    # See https://core.telegram.org/bots/api#callbackquery
+    query.answer()
+
+    query.edit_message_text(text=f"Selected option: {query.data}")
     return "ECHO"
 
 
@@ -17,9 +42,10 @@ def echo(update, context):
 
 
 def handle_users_reply(update, context, redis_connection):
-    user_reply = update.message.text
-    chat_id = update.message.chat_id
-    if user_reply == '/start':
+    chat_id = update.message.chat_id if update.message\
+        else update.callback_query.from_user.id
+
+    if update.message and update.message.text == '/start':
         user_state = 'START'
     else:
         user_state = redis_connection.get(chat_id)
@@ -29,7 +55,8 @@ def handle_users_reply(update, context, redis_connection):
 
     states_functions = {
         'START': start,
-        'ECHO': echo
+        'ECHO': echo,
+        'OPTION': button,
     }
     state_handler = states_functions[user_state]
     next_state = state_handler(update, context)
@@ -57,6 +84,7 @@ def main():
     dispatcher = updater.dispatcher
     dispatcher.add_handler(MessageHandler(Filters.text, users_reply_handler))
     dispatcher.add_handler(CommandHandler('start', users_reply_handler))
+    dispatcher.add_handler(CallbackQueryHandler(users_reply_handler))
     updater.start_polling()
 
 
