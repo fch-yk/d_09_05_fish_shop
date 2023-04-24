@@ -2,19 +2,30 @@ import functools
 
 from environs import Env
 from redis import Redis
-from telegram.ext import (CallbackQueryHandler, CommandHandler, Filters,
-                          MessageHandler, Updater)
-from telegram import InlineKeyboardButton, InlineKeyboardMarkup
+from telegram import InlineKeyboardButton, InlineKeyboardMarkup, Update
+from telegram.ext import (CallbackContext, CallbackQueryHandler,
+                          CommandHandler, Filters, MessageHandler, Updater)
+
+from elastic_api import ElasticConnection
 
 
-def start(update, context):
-    keyboard = [
-        [
-            InlineKeyboardButton("Option 1", callback_data='1'),
-            InlineKeyboardButton("Option 2", callback_data='2'),
-        ],
-        [InlineKeyboardButton("Option 3", callback_data='3')],
-    ]
+def start(
+    update: Update,
+    context: CallbackContext,
+    elastic_connection: ElasticConnection
+) -> str:
+    products = elastic_connection.get_products()
+    keyboard = []
+    for product in products['data']:
+        keyboard.append(
+            [
+                InlineKeyboardButton(
+                    product['attributes']['name'],
+                    callback_data=product['id']
+                )
+            ]
+        )
+
     reply_markup = InlineKeyboardMarkup(keyboard)
     update.message.reply_text('Please choose:', reply_markup=reply_markup)
 
@@ -41,9 +52,14 @@ def echo(update, context):
     return "ECHO"
 
 
-def handle_users_reply(update, context, redis_connection):
-    chat_id = update.message.chat_id if update.message\
-        else update.callback_query.from_user.id
+def handle_users_reply(
+        update: Update,
+        context: CallbackContext,
+        redis_connection: Redis,
+        elastic_connection: ElasticConnection) -> None:
+    chat_id_prefix = 'fish_shop_'
+    chat_id = f'{chat_id_prefix}{update.message.chat_id}' if update.message\
+        else f'{chat_id_prefix}{update.callback_query.from_user.id}'
 
     if update.message and update.message.text == '/start':
         user_state = 'START'
@@ -53,8 +69,13 @@ def handle_users_reply(update, context, redis_connection):
     if not user_state:
         user_state = 'START'
 
+    start_handler = functools.partial(
+        start,
+        elastic_connection=elastic_connection,
+    )
+
     states_functions = {
-        'START': start,
+        'START': start_handler,
         'ECHO': echo,
         'OPTION': button,
     }
@@ -75,9 +96,15 @@ def main():
             decode_responses=True
         )
 
+    elastic_connection = ElasticConnection(
+        client_id=env('ELASTIC_PATH_CLIENT_ID'),
+        client_secret=env('ELASTIC_PATH_CLIENT_SECRET'),
+    )
+
     users_reply_handler = functools.partial(
         handle_users_reply,
         redis_connection=redis_connection,
+        elastic_connection=elastic_connection,
     )
 
     updater = Updater(env('FISH_BOT_TOKEN'))
