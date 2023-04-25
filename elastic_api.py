@@ -46,6 +46,20 @@ class ElasticConnection():
         response.raise_for_status()
         return response.json()
 
+    def get_product(self, id):
+        self.set_access_token()
+        headers = {
+            'Authorization': f'Bearer {self.access_token}',
+        }
+
+        response = requests.get(
+            f'https://api.moltin.com/catalog/products/{id}/',
+            headers=headers,
+            timeout=30,
+        )
+        response.raise_for_status()
+        return response.json()
+
     def add_product_to_cart(self, cart_id, product_id, quantity):
         self.set_access_token()
         headers = {

@@ -29,11 +29,14 @@ def start(
     reply_markup = InlineKeyboardMarkup(keyboard)
     update.message.reply_text('Please choose:', reply_markup=reply_markup)
 
-    return 'OPTION'
+    return 'HANDLE_MENU'
 
 
-def button(update, context):
-    """Parses the CallbackQuery and updates the message text."""
+def handle_menu(
+    update: Update,
+    context: CallbackContext,
+    elastic_connection: ElasticConnection
+) -> str:
     query = update.callback_query
 
     # CallbackQueries need to be answered,
@@ -41,15 +44,29 @@ def button(update, context):
     # Some clients may have trouble otherwise.
     # See https://core.telegram.org/bots/api#callbackquery
     query.answer()
+    product = elastic_connection.get_product(query.data)["data"]
+    query.edit_message_text(
+        text=f'{product["attributes"]["name"]}\n\n'
+        f'{product["meta"]["display_price"]["without_tax"]["formatted"]} '
+        'per kg\n\n'
+        f'{product["attributes"]["description"]}'
+    )
 
-    query.edit_message_text(text=f"Selected option: {query.data}")
-    return "ECHO"
+    return 'START'
 
 
-def echo(update, context):
-    users_reply = update.message.text
-    update.message.reply_text(users_reply)
-    return "ECHO"
+# def button(update, context):
+#     """Parses the CallbackQuery and updates the message text."""
+#     query = update.callback_query
+
+#     # CallbackQueries need to be answered,
+#     # even if no notification to the user is needed
+#     # Some clients may have trouble otherwise.
+#     # See https://core.telegram.org/bots/api#callbackquery
+#     query.answer()
+
+#     query.edit_message_text(text=f"Selected option: {query.data}")
+#     return "HANDLE_MENU"
 
 
 def handle_users_reply(
@@ -74,10 +91,14 @@ def handle_users_reply(
         elastic_connection=elastic_connection,
     )
 
+    menu_handler = functools.partial(
+        handle_menu,
+        elastic_connection=elastic_connection,
+    )
+
     states_functions = {
         'START': start_handler,
-        'ECHO': echo,
-        'OPTION': button,
+        'HANDLE_MENU': menu_handler,
     }
     state_handler = states_functions[user_state]
     next_state = state_handler(update, context)
@@ -96,10 +117,11 @@ def main():
             decode_responses=True
         )
 
-    elastic_connection = ElasticConnection(
-        client_id=env('ELASTIC_PATH_CLIENT_ID'),
-        client_secret=env('ELASTIC_PATH_CLIENT_SECRET'),
-    )
+    with env.prefixed('ELASTIC_'):
+        elastic_connection = ElasticConnection(
+            client_id=env('PATH_CLIENT_ID'),
+            client_secret=env('PATH_CLIENT_SECRET'),
+        )
 
     users_reply_handler = functools.partial(
         handle_users_reply,
