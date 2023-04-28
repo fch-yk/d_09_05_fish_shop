@@ -9,11 +9,7 @@ from telegram.ext import (CallbackContext, CallbackQueryHandler,
 from elastic_api import ElasticConnection
 
 
-def start(
-    update: Update,
-    context: CallbackContext,
-    elastic_connection: ElasticConnection
-) -> str:
+def get_menu_reply_markup(elastic_connection: ElasticConnection):
     products = elastic_connection.get_products()
     keyboard = []
     for product in products['data']:
@@ -26,7 +22,15 @@ def start(
             ]
         )
 
-    reply_markup = InlineKeyboardMarkup(keyboard)
+    return InlineKeyboardMarkup(keyboard)
+
+
+def start(
+    update: Update,
+    context: CallbackContext,
+    elastic_connection: ElasticConnection
+) -> str:
+    reply_markup = get_menu_reply_markup(elastic_connection)
     update.message.reply_text('Please choose:', reply_markup=reply_markup)
 
     return 'HANDLE_MENU'
@@ -58,24 +62,40 @@ def handle_menu(
         'per kg\n\n'
         f'{product["attributes"]["description"]}'
     )
+    keyboard = [[InlineKeyboardButton('Back', callback_data='Back')]]
 
-    context.bot.send_photo(chat_id=chat_id, photo=image_link, caption=caption)
+    reply_markup = InlineKeyboardMarkup(keyboard)
+    context.bot.send_photo(
+        chat_id=chat_id,
+        photo=image_link,
+        caption=caption,
+        reply_markup=reply_markup
+    )
 
-    return 'START'
+    return 'HANDLE_DESCRIPTION'
 
 
-# def button(update, context):
-#     """Parses the CallbackQuery and updates the message text."""
-#     query = update.callback_query
+def handle_description(
+    update: Update,
+    context: CallbackContext,
+    elastic_connection: ElasticConnection
+):
+    query = update.callback_query
+    query.answer()
 
-#     # CallbackQueries need to be answered,
-#     # even if no notification to the user is needed
-#     # Some clients may have trouble otherwise.
-#     # See https://core.telegram.org/bots/api#callbackquery
-#     query.answer()
-
-#     query.edit_message_text(text=f"Selected option: {query.data}")
-#     return "HANDLE_MENU"
+    chat_id = query.from_user.id
+    context.bot.delete_message(
+        chat_id=chat_id,
+        message_id=query.message.message_id
+    )
+    if query.data == 'Back':
+        reply_markup = get_menu_reply_markup(elastic_connection)
+        context.bot.send_message(
+            chat_id=chat_id,
+            text='Please choose:',
+            reply_markup=reply_markup
+        )
+        return 'HANDLE_MENU'
 
 
 def handle_users_reply(
@@ -105,9 +125,15 @@ def handle_users_reply(
         elastic_connection=elastic_connection,
     )
 
+    description_handler = functools.partial(
+        handle_description,
+        elastic_connection=elastic_connection,
+    )
+
     states_functions = {
         'START': start_handler,
         'HANDLE_MENU': menu_handler,
+        'HANDLE_DESCRIPTION': description_handler,
     }
     state_handler = states_functions[user_state]
     next_state = state_handler(update, context)
