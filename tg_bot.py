@@ -44,13 +44,22 @@ def handle_menu(
     # Some clients may have trouble otherwise.
     # See https://core.telegram.org/bots/api#callbackquery
     query.answer()
+    chat_id = query.from_user.id
+    context.bot.delete_message(
+        chat_id=chat_id,
+        message_id=query.message.message_id
+    )
     product = elastic_connection.get_product(query.data)["data"]
-    query.edit_message_text(
-        text=f'{product["attributes"]["name"]}\n\n'
+    main_image_id = product['relationships']['main_image']['data']['id']
+    image_link = elastic_connection.get_file_link(main_image_id)
+    caption = (
+        f'{product["attributes"]["name"]}\n\n'
         f'{product["meta"]["display_price"]["without_tax"]["formatted"]} '
         'per kg\n\n'
         f'{product["attributes"]["description"]}'
     )
+
+    context.bot.send_photo(chat_id=chat_id, photo=image_link, caption=caption)
 
     return 'START'
 
