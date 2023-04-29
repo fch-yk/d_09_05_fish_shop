@@ -1,4 +1,6 @@
 import functools
+from textwrap import dedent
+from typing import Dict
 
 from environs import Env
 from redis import Redis
@@ -21,8 +23,32 @@ def get_menu_reply_markup(elastic_connection: ElasticConnection):
                 )
             ]
         )
-
+    keyboard.append(
+        [InlineKeyboardButton(text='Cart', callback_data='Cart')]
+    )
     return InlineKeyboardMarkup(keyboard)
+
+
+def get_cart_text(cart: Dict, cart_items: Dict) -> str:
+    cart_text = ''
+    total = cart["data"]["meta"]["display_price"]["with_tax"]["formatted"]
+
+    for cart_item in cart_items['data']:
+        quantity = cart_item['quantity']
+        display_price = cart_item['meta']['display_price']
+        price_with_tax = display_price['with_tax']
+        product_text = dedent(
+            f'''\
+            {cart_item['name']}
+            {cart_item['description']}
+            {price_with_tax['unit']['formatted']} per kg
+            {quantity} kg for {price_with_tax['value']['formatted']}
+
+            '''
+        )
+        cart_text += product_text
+
+    return f'{cart_text} Total {total}'
 
 
 def start(
@@ -53,6 +79,17 @@ def handle_menu(
         chat_id=chat_id,
         message_id=query.message.message_id
     )
+
+    if query.data == 'Cart':
+        cart = elastic_connection.get_cart(cart_id=chat_id)
+        cart_items = elastic_connection.get_cart_items(cart_id=chat_id)
+
+        context.bot.send_message(
+            chat_id=chat_id,
+            text=get_cart_text(cart=cart, cart_items=cart_items),
+        )
+        return 'HANDLE_CART'
+
     product_id = query.data
     product = elastic_connection.get_product(product_id)["data"]
     main_image_id = product['relationships']['main_image']['data']['id']
@@ -74,6 +111,7 @@ def handle_menu(
 
     keyboard = [
         quantity_buttons,
+        [InlineKeyboardButton(text='Cart', callback_data='Cart')],
         [InlineKeyboardButton('Back', callback_data='Back')]
     ]
 
@@ -110,14 +148,36 @@ def handle_description(
         )
         return 'HANDLE_MENU'
 
+    if query.data == 'Cart':
+        context.bot.delete_message(
+            chat_id=chat_id,
+            message_id=query.message.message_id
+        )
+        cart = elastic_connection.get_cart(cart_id=chat_id)
+        cart_items = elastic_connection.get_cart_items(cart_id=chat_id)
+
+        context.bot.send_message(
+            chat_id=chat_id,
+            text=get_cart_text(cart=cart, cart_items=cart_items),
+        )
+        return 'HANDLE_CART'
+
     product_id, quantity = query.data.split(',')
     elastic_connection.add_product_to_cart(
-        cart_id=query.from_user.id,
+        cart_id=chat_id,
         product_id=product_id,
         quantity=int(quantity)
     )
 
     return 'HANDLE_DESCRIPTION'
+
+
+def handle_cart(
+    update: Update,
+    context: CallbackContext,
+    elastic_connection: ElasticConnection
+):
+    return 'HANDLE_CART'
 
 
 def handle_users_reply(
@@ -152,10 +212,16 @@ def handle_users_reply(
         elastic_connection=elastic_connection,
     )
 
+    cart_handler = functools.partial(
+        handle_cart,
+        elastic_connection=elastic_connection,
+    )
+
     states_functions = {
         'START': start_handler,
         'HANDLE_MENU': menu_handler,
         'HANDLE_DESCRIPTION': description_handler,
+        'HANDLE_CART': cart_handler,
     }
     state_handler = states_functions[user_state]
     next_state = state_handler(update, context)
