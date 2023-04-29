@@ -55,6 +55,10 @@ def get_cart_text(cart: Dict, cart_items: Dict) -> str:
 
 def get_cart_reply_markup(cart_items: Dict) -> InlineKeyboardMarkup:
     keyboard = []
+    keyboard.append(
+        [InlineKeyboardButton(text='Pay', callback_data='Pay')]
+    )
+
     for cart_item in cart_items['data']:
         keyboard.append(
             [
@@ -88,7 +92,8 @@ def handle_menu(
     elastic_connection: ElasticConnection
 ) -> str:
     query = update.callback_query
-
+    if not query:
+        return 'HANDLE_MENU'
     # CallbackQueries need to be answered,
     # even if no notification to the user is needed
     # Some clients may have trouble otherwise.
@@ -151,8 +156,10 @@ def handle_description(
     update: Update,
     context: CallbackContext,
     elastic_connection: ElasticConnection
-):
+) -> str:
     query = update.callback_query
+    if not query:
+        return 'HANDLE_DESCRIPTION'
     query.answer()
 
     chat_id = query.from_user.id
@@ -197,8 +204,10 @@ def handle_cart(
     update: Update,
     context: CallbackContext,
     elastic_connection: ElasticConnection
-):
+) -> str:
     query = update.callback_query
+    if not query:
+        return 'HANDLE_CART'
     query.answer()
     chat_id = query.from_user.id
     context.bot.delete_message(
@@ -213,6 +222,10 @@ def handle_cart(
         )
         return 'HANDLE_MENU'
 
+    if query.data == 'Pay':
+        context.bot.send_message(chat_id=chat_id, text='Send your email:')
+        return 'WAITING_EMAIL'
+
     elastic_connection.remove_cart_item(cart_id=chat_id, item_id=query.data)
     cart = elastic_connection.get_cart(cart_id=chat_id)
     cart_items = elastic_connection.get_cart_items(cart_id=chat_id)
@@ -224,6 +237,15 @@ def handle_cart(
     )
 
     return 'HANDLE_CART'
+
+
+def handle_email(
+    update: Update,
+    context: CallbackContext,
+    elastic_connection: ElasticConnection
+) -> str:
+    update.message.reply_text(f'Your email: {update.message.text}')
+    return 'START'
 
 
 def handle_users_reply(
@@ -243,34 +265,15 @@ def handle_users_reply(
     if not user_state:
         user_state = 'START'
 
-    start_handler = functools.partial(
-        start,
-        elastic_connection=elastic_connection,
-    )
-
-    menu_handler = functools.partial(
-        handle_menu,
-        elastic_connection=elastic_connection,
-    )
-
-    description_handler = functools.partial(
-        handle_description,
-        elastic_connection=elastic_connection,
-    )
-
-    cart_handler = functools.partial(
-        handle_cart,
-        elastic_connection=elastic_connection,
-    )
-
     states_functions = {
-        'START': start_handler,
-        'HANDLE_MENU': menu_handler,
-        'HANDLE_DESCRIPTION': description_handler,
-        'HANDLE_CART': cart_handler,
+        'START': start,
+        'HANDLE_MENU': handle_menu,
+        'HANDLE_DESCRIPTION': handle_description,
+        'HANDLE_CART': handle_cart,
+        'WAITING_EMAIL': handle_email,
     }
     state_handler = states_functions[user_state]
-    next_state = state_handler(update, context)
+    next_state = state_handler(update, context, elastic_connection)
     redis_connection.set(chat_id, next_state)
 
 
