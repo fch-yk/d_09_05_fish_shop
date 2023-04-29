@@ -53,7 +53,8 @@ def handle_menu(
         chat_id=chat_id,
         message_id=query.message.message_id
     )
-    product = elastic_connection.get_product(query.data)["data"]
+    product_id = query.data
+    product = elastic_connection.get_product(product_id)["data"]
     main_image_id = product['relationships']['main_image']['data']['id']
     image_link = elastic_connection.get_file_link(main_image_id)
     caption = (
@@ -62,7 +63,19 @@ def handle_menu(
         'per kg\n\n'
         f'{product["attributes"]["description"]}'
     )
-    keyboard = [[InlineKeyboardButton('Back', callback_data='Back')]]
+    quantity_buttons = []
+    for quantity in (1, 5, 10):
+        quantity_buttons.append(
+            InlineKeyboardButton(
+                text=f'{quantity} kg',
+                callback_data=f'{product_id},{quantity}'
+            )
+        )
+
+    keyboard = [
+        quantity_buttons,
+        [InlineKeyboardButton('Back', callback_data='Back')]
+    ]
 
     reply_markup = InlineKeyboardMarkup(keyboard)
     context.bot.send_photo(
@@ -84,11 +97,11 @@ def handle_description(
     query.answer()
 
     chat_id = query.from_user.id
-    context.bot.delete_message(
-        chat_id=chat_id,
-        message_id=query.message.message_id
-    )
     if query.data == 'Back':
+        context.bot.delete_message(
+            chat_id=chat_id,
+            message_id=query.message.message_id
+        )
         reply_markup = get_menu_reply_markup(elastic_connection)
         context.bot.send_message(
             chat_id=chat_id,
@@ -96,6 +109,15 @@ def handle_description(
             reply_markup=reply_markup
         )
         return 'HANDLE_MENU'
+
+    product_id, quantity = query.data.split(',')
+    elastic_connection.add_product_to_cart(
+        cart_id=query.from_user.id,
+        product_id=product_id,
+        quantity=int(quantity)
+    )
+
+    return 'HANDLE_DESCRIPTION'
 
 
 def handle_users_reply(
