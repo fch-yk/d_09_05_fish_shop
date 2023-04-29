@@ -11,7 +11,9 @@ from telegram.ext import (CallbackContext, CallbackQueryHandler,
 from elastic_api import ElasticConnection
 
 
-def get_menu_reply_markup(elastic_connection: ElasticConnection):
+def get_menu_reply_markup(
+    elastic_connection: ElasticConnection
+) -> InlineKeyboardMarkup:
     products = elastic_connection.get_products()
     keyboard = []
     for product in products['data']:
@@ -30,7 +32,7 @@ def get_menu_reply_markup(elastic_connection: ElasticConnection):
 
 
 def get_cart_text(cart: Dict, cart_items: Dict) -> str:
-    cart_text = ''
+    cart_text = 'Your cart:\n\n'
     total = cart["data"]["meta"]["display_price"]["with_tax"]["formatted"]
 
     for cart_item in cart_items['data']:
@@ -49,6 +51,24 @@ def get_cart_text(cart: Dict, cart_items: Dict) -> str:
         cart_text += product_text
 
     return f'{cart_text} Total {total}'
+
+
+def get_cart_reply_markup(cart_items: Dict) -> InlineKeyboardMarkup:
+    keyboard = []
+    for cart_item in cart_items['data']:
+        keyboard.append(
+            [
+                InlineKeyboardButton(
+                    text=f"Remove {cart_item['name']} from the cart",
+                    callback_data=cart_item['id']
+                )
+            ]
+        )
+
+    keyboard.append(
+        [InlineKeyboardButton(text='To menu', callback_data='To menu')]
+    )
+    return InlineKeyboardMarkup(keyboard)
 
 
 def start(
@@ -87,6 +107,7 @@ def handle_menu(
         context.bot.send_message(
             chat_id=chat_id,
             text=get_cart_text(cart=cart, cart_items=cart_items),
+            reply_markup=get_cart_reply_markup(cart_items=cart_items)
         )
         return 'HANDLE_CART'
 
@@ -140,11 +161,10 @@ def handle_description(
             chat_id=chat_id,
             message_id=query.message.message_id
         )
-        reply_markup = get_menu_reply_markup(elastic_connection)
         context.bot.send_message(
             chat_id=chat_id,
             text='Please choose:',
-            reply_markup=reply_markup
+            reply_markup=get_menu_reply_markup(elastic_connection)
         )
         return 'HANDLE_MENU'
 
@@ -159,6 +179,7 @@ def handle_description(
         context.bot.send_message(
             chat_id=chat_id,
             text=get_cart_text(cart=cart, cart_items=cart_items),
+            reply_markup=get_cart_reply_markup(cart_items=cart_items)
         )
         return 'HANDLE_CART'
 
@@ -177,6 +198,31 @@ def handle_cart(
     context: CallbackContext,
     elastic_connection: ElasticConnection
 ):
+    query = update.callback_query
+    query.answer()
+    chat_id = query.from_user.id
+    context.bot.delete_message(
+        chat_id=chat_id,
+        message_id=query.message.message_id
+    )
+    if query.data == 'To menu':
+        context.bot.send_message(
+            chat_id=chat_id,
+            text='Please choose:',
+            reply_markup=get_menu_reply_markup(elastic_connection)
+        )
+        return 'HANDLE_MENU'
+
+    elastic_connection.remove_cart_item(cart_id=chat_id, item_id=query.data)
+    cart = elastic_connection.get_cart(cart_id=chat_id)
+    cart_items = elastic_connection.get_cart_items(cart_id=chat_id)
+
+    context.bot.send_message(
+        chat_id=chat_id,
+        text=get_cart_text(cart=cart, cart_items=cart_items),
+        reply_markup=get_cart_reply_markup(cart_items=cart_items)
+    )
+
     return 'HANDLE_CART'
 
 

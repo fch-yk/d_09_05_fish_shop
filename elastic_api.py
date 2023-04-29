@@ -122,3 +122,19 @@ class ElasticConnection():
         )
         response.raise_for_status()
         return response.json()
+
+    def remove_cart_item(self, cart_id, item_id):
+        self.set_access_token()
+        headers = {
+            'Authorization': f'Bearer {self.access_token}',
+        }
+        response = requests.delete(
+            url=(
+                f'https://api.moltin.com/v2/carts/{cart_id}/items/'
+                f'{item_id}/'
+            ),
+            headers=headers,
+            timeout=30,
+        )
+        response.raise_for_status()
+        return response.json()
