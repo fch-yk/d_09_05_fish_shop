@@ -55,19 +55,20 @@ def get_cart_text(cart: Dict, cart_items: Dict) -> str:
 
 def get_cart_reply_markup(cart_items: Dict) -> InlineKeyboardMarkup:
     keyboard = []
-    keyboard.append(
-        [InlineKeyboardButton(text='Pay', callback_data='Pay')]
-    )
-
-    for cart_item in cart_items['data']:
+    if cart_items['data']:
         keyboard.append(
-            [
-                InlineKeyboardButton(
-                    text=f"Remove {cart_item['name']} from the cart",
-                    callback_data=cart_item['id']
-                )
-            ]
+            [InlineKeyboardButton(text='Pay', callback_data='Pay')]
         )
+
+        for cart_item in cart_items['data']:
+            keyboard.append(
+                [
+                    InlineKeyboardButton(
+                        text=f"Remove {cart_item['name']} from the cart",
+                        callback_data=cart_item['id']
+                    )
+                ]
+            )
 
     keyboard.append(
         [InlineKeyboardButton(text='To menu', callback_data='To menu')]
@@ -210,11 +211,11 @@ def handle_cart(
         return 'HANDLE_CART'
     query.answer()
     chat_id = query.from_user.id
-    context.bot.delete_message(
-        chat_id=chat_id,
-        message_id=query.message.message_id
-    )
     if query.data == 'To menu':
+        context.bot.delete_message(
+            chat_id=chat_id,
+            message_id=query.message.message_id
+        )
         context.bot.send_message(
             chat_id=chat_id,
             text='Please choose:',
@@ -223,6 +224,10 @@ def handle_cart(
         return 'HANDLE_MENU'
 
     if query.data == 'Pay':
+        context.bot.delete_message(
+            chat_id=chat_id,
+            message_id=query.message.message_id
+        )
         context.bot.send_message(chat_id=chat_id, text='Send your email:')
         return 'WAITING_EMAIL'
 
@@ -230,9 +235,10 @@ def handle_cart(
     cart = elastic_connection.get_cart(cart_id=chat_id)
     cart_items = elastic_connection.get_cart_items(cart_id=chat_id)
 
-    context.bot.send_message(
-        chat_id=chat_id,
-        text=get_cart_text(cart=cart, cart_items=cart_items),
+    query.message.edit_text(
+        text=get_cart_text(cart=cart, cart_items=cart_items)
+    )
+    query.message.edit_reply_markup(
         reply_markup=get_cart_reply_markup(cart_items=cart_items)
     )
 
