@@ -138,3 +138,24 @@ class ElasticConnection():
         )
         response.raise_for_status()
         return response.json()
+
+    def create_customer(self, name, email):
+        self.set_access_token()
+        headers = {
+            'Authorization': f'Bearer {self.access_token}',
+        }
+        payload = {
+            'data': {
+                'type': 'customer',
+                'name': name,
+                'email': email,
+            }
+        }
+        response = requests.post(
+            url='https://api.moltin.com/v2/customers/',
+            headers=headers,
+            json=payload,
+            timeout=30,
+        )
+        response.raise_for_status()
+        return response.json()

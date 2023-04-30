@@ -101,20 +101,13 @@ def handle_menu(
     # See https://core.telegram.org/bots/api#callbackquery
     query.answer()
     chat_id = query.from_user.id
-    context.bot.delete_message(
-        chat_id=chat_id,
-        message_id=query.message.message_id
-    )
 
     if query.data == 'Cart':
         cart = elastic_connection.get_cart(cart_id=chat_id)
         cart_items = elastic_connection.get_cart_items(cart_id=chat_id)
-
-        context.bot.send_message(
-            chat_id=chat_id,
-            text=get_cart_text(cart=cart, cart_items=cart_items),
-            reply_markup=get_cart_reply_markup(cart_items=cart_items)
-        )
+        cart_text = get_cart_text(cart=cart, cart_items=cart_items)
+        reply_markup = get_cart_reply_markup(cart_items=cart_items)
+        query.message.edit_text(text=cart_text, reply_markup=reply_markup)
         return 'HANDLE_CART'
 
     product_id = query.data
@@ -149,6 +142,10 @@ def handle_menu(
         caption=caption,
         reply_markup=reply_markup
     )
+    context.bot.delete_message(
+        chat_id=chat_id,
+        message_id=query.message.message_id
+    )
 
     return 'HANDLE_DESCRIPTION'
 
@@ -165,29 +162,31 @@ def handle_description(
 
     chat_id = query.from_user.id
     if query.data == 'Back':
-        context.bot.delete_message(
-            chat_id=chat_id,
-            message_id=query.message.message_id
-        )
+        reply_markup = get_menu_reply_markup(elastic_connection)
         context.bot.send_message(
             chat_id=chat_id,
             text='Please choose:',
-            reply_markup=get_menu_reply_markup(elastic_connection)
+            reply_markup=reply_markup
+        )
+        context.bot.delete_message(
+            chat_id=chat_id,
+            message_id=query.message.message_id
         )
         return 'HANDLE_MENU'
 
     if query.data == 'Cart':
+        cart = elastic_connection.get_cart(cart_id=chat_id)
+        cart_items = elastic_connection.get_cart_items(cart_id=chat_id)
+        cart_text = get_cart_text(cart=cart, cart_items=cart_items)
+        reply_markup = get_cart_reply_markup(cart_items=cart_items)
+        context.bot.send_message(
+            chat_id=chat_id,
+            text=cart_text,
+            reply_markup=reply_markup
+        )
         context.bot.delete_message(
             chat_id=chat_id,
             message_id=query.message.message_id
-        )
-        cart = elastic_connection.get_cart(cart_id=chat_id)
-        cart_items = elastic_connection.get_cart_items(cart_id=chat_id)
-
-        context.bot.send_message(
-            chat_id=chat_id,
-            text=get_cart_text(cart=cart, cart_items=cart_items),
-            reply_markup=get_cart_reply_markup(cart_items=cart_items)
         )
         return 'HANDLE_CART'
 
@@ -212,23 +211,17 @@ def handle_cart(
     query.answer()
     chat_id = query.from_user.id
     if query.data == 'To menu':
-        context.bot.delete_message(
-            chat_id=chat_id,
-            message_id=query.message.message_id
-        )
-        context.bot.send_message(
-            chat_id=chat_id,
-            text='Please choose:',
-            reply_markup=get_menu_reply_markup(elastic_connection)
-        )
+        menu_text = 'Please choose:'
+        reply_markup = get_menu_reply_markup(elastic_connection)
+        query.message.edit_text(text=menu_text, reply_markup=reply_markup)
+
         return 'HANDLE_MENU'
 
     if query.data == 'Pay':
-        context.bot.delete_message(
-            chat_id=chat_id,
-            message_id=query.message.message_id
-        )
-        context.bot.send_message(chat_id=chat_id, text='Send your email:')
+        text = 'Send your email:'
+        reply_markup = InlineKeyboardMarkup([])
+        query.message.edit_text(text=text, reply_markup=reply_markup)
+
         return 'WAITING_EMAIL'
 
     elastic_connection.remove_cart_item(cart_id=chat_id, item_id=query.data)
@@ -250,8 +243,16 @@ def handle_email(
     context: CallbackContext,
     elastic_connection: ElasticConnection
 ) -> str:
-    update.message.reply_text(f'Your email: {update.message.text}')
-    return 'START'
+    name = str(update.message.chat_id)
+    email = update.message.text
+    elastic_connection.create_customer(name=name, email=email)
+    text = 'Thank you for your order!\n We will contact you soon.'
+    reply_markup = InlineKeyboardMarkup(
+        [[InlineKeyboardButton('To menu', callback_data='To menu')]]
+    )
+    update.message.reply_text(text=text, reply_markup=reply_markup)
+
+    return 'HANDLE_CART'
 
 
 def handle_users_reply(
