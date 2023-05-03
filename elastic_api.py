@@ -13,8 +13,8 @@ class ElasticConnection():
     def set_access_token(self):
         if self.access_token:
             current_timestamp = datetime.now().timestamp()
-            if current_timestamp > self.access_token_expiration_timestamp:
-                print('yes')
+            if current_timestamp < self.access_token_expiration_timestamp:
+                return
         payload = {
             'client_id': self.client_id,
             'client_secret': self.client_secret,
@@ -46,14 +46,14 @@ class ElasticConnection():
         response.raise_for_status()
         return response.json()
 
-    def get_product(self, id):
+    def get_product(self, product_id):
         self.set_access_token()
         headers = {
             'Authorization': f'Bearer {self.access_token}',
         }
 
         response = requests.get(
-            f'https://api.moltin.com/catalog/products/{id}/',
+            f'https://api.moltin.com/catalog/products/{product_id}/',
             headers=headers,
             timeout=30,
         )
