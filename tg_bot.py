@@ -158,10 +158,10 @@ def handle_description(
     query = update.callback_query
     if not query:
         return 'HANDLE_DESCRIPTION'
-    query.answer()
 
     chat_id = query.from_user.id
     if query.data == 'Back':
+        query.answer()
         reply_markup = get_menu_reply_markup(elastic_connection)
         context.bot.send_message(
             chat_id=chat_id,
@@ -175,6 +175,7 @@ def handle_description(
         return 'HANDLE_MENU'
 
     if query.data == 'Cart':
+        query.answer()
         cart = elastic_connection.get_cart(cart_id=chat_id)
         cart_items = elastic_connection.get_cart_items(cart_id=chat_id)
         cart_text = get_cart_text(cart=cart, cart_items=cart_items)
@@ -195,6 +196,9 @@ def handle_description(
         cart_id=chat_id,
         product_id=product_id,
         quantity=int(quantity)
+    )
+    query.answer(
+        text='The product has been added to the cart'
     )
 
     return 'HANDLE_DESCRIPTION'
