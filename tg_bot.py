@@ -318,6 +318,7 @@ def main():
     dispatcher.add_handler(CommandHandler('start', users_reply_handler))
     dispatcher.add_handler(CallbackQueryHandler(users_reply_handler))
     updater.start_polling()
+    updater.idle()
 
 
 if __name__ == '__main__':
