@@ -1,0 +1,16 @@
+services:
+  redis:
+    image: redis:7.2.1-alpine
+    restart: always
+    command: redis-server --save 20 1 --loglevel warning --requirepass ${REDIS_PASSWORD}
+    volumes:
+      - type: volume
+        source: redis_cache
+        target: /redis_data
+  bot:
+    build:
+      context: .
+    restart: always
+    command: [ "python3", "tg_bot.py" ]
+volumes:
+  redis_cache:

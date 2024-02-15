@@ -14,7 +14,7 @@ The project works with the following components:
 
 ## Prerequisites
 
-Python 3.11 is required.
+Python 3.12 is required.
 
 ## Installation
 
@@ -44,7 +44,7 @@ To set up variables in .env file, create it in the root directory of the project
 FISH_BOT_TOKEN=replace_me
 REDIS_HOST=replace_me
 REDIS_PASSWORD=replace_me
-REDIS_PORT=13604
+REDIS_PORT=6379
 ELASTIC_PATH_CLIENT_ID=replace_me
 ELASTIC_PATH_CLIENT_SECRET=replace_me
 ```
@@ -58,6 +58,14 @@ python tg_bot.py
 ```
 
 - Go to the bot and start shopping.
+
+## Usage with Docker
+
+Run:
+
+```bash
+docker compose up -d --build
+```
 
 ## Project goals
 
